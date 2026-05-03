@@ -36,7 +36,7 @@ export default function Navbar() {
 
           <Link
             to="/research/new"
-            className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
+            className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-blue shadow-sm transition hover:bg-brand-700"
           >
             <PlusCircle size={18} />
             New Research

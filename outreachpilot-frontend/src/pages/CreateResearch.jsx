@@ -215,7 +215,7 @@ export default function CreateResearch() {
             ) : (
               <>
                 <Sparkles size={18} />
-                Generate Research Report
+                <p className="text-black">Generate Research Report</p>
               </>
             )}
           </button>

@@ -64,7 +64,7 @@ export default function Home() {
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 to="/research/new"
-                className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-6 py-3 text-sm font-bold text-white shadow-sm hover:bg-brand-700"
+                className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-6 py-3 text-sm font-bold text-black shadow-sm hover:bg-brand-700"
               >
                 Start Research
                 <ArrowRight size={18} />
