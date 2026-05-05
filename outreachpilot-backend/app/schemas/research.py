@@ -254,6 +254,7 @@ class ReportOutput(BaseModel):
     title: Optional[str] = None
     markdown: Optional[str] = None
     html: Optional[str] = None
+    pdf_s3_key: Optional[str] = None
     pdf_url: Optional[str] = None
 
 
@@ -347,6 +348,7 @@ class ResearchReportResponse(BaseModel):
 
     best_outreach_angle: Optional[str] = None
     report_markdown: Optional[str] = None
+    pdf_url: Optional[str] = None
 
     cold_email_subject: Optional[str] = None
     cold_email_body: Optional[str] = None
@@ -358,3 +360,5 @@ class ResearchReportResponse(BaseModel):
 
     approval_status: ApprovalStatus = "pending"
     sent_status: SentStatus = "not_sent"
+
+    error_message: Optional[str] = None

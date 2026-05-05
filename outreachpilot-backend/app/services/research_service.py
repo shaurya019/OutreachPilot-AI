@@ -4,12 +4,15 @@ from typing import Any, Dict, Optional
 from app.agents.graph import run_research_graph
 from app.repositories.report_repository import ReportRepository
 from app.schemas.research import ResearchStartRequest
+from app.services.pdf_service import generate_report_pdf
+from app.services.s3_service import S3Service
 from app.utils.time import utc_now_iso
 
 
 class ResearchService:
     def __init__(self):
         self.repository = ReportRepository()
+        self.s3_service = S3Service()
 
     def start_research(self, payload: ResearchStartRequest) -> Dict[str, Any]:
         report_id = str(uuid.uuid4())
@@ -110,6 +113,26 @@ class ResearchService:
             if errors:
                 metadata["error_message"] = "; ".join(errors)
 
+            # 1. Generate PDF locally from Markdown
+            report_markdown = report.get("markdown") or ""
+            report_title = report.get("title") or f"Research Report {report_id}"
+
+            pdf_path = generate_report_pdf(
+                report_id=report_id,
+                report_markdown=report_markdown,
+                title=report_title,
+            )
+
+            # 2. Upload PDF to S3
+            pdf_s3_key = self.s3_service.upload_pdf(
+                file_path=pdf_path,
+                report_id=report_id,
+            )
+
+            # 3. Store only S3 key in DynamoDB
+            report["pdf_s3_key"] = pdf_s3_key
+            report["pdf_url"] = None
+
             self.repository.save_workflow_result(
                 report_id=report_id,
                 agent_outputs=agent_outputs,
@@ -124,7 +147,7 @@ class ResearchService:
                 status="failed",
                 error_message=str(exc),
             )
-
+    
     def get_report_response(self, report_id: str) -> Optional[Dict[str, Any]]:
         item = self.repository.get_report_by_id(report_id)
 
@@ -155,8 +178,7 @@ class ResearchService:
             "message": "Outreach email rejected and was not sent.",
         }
 
-    @staticmethod
-    def map_dynamodb_item_to_response(item: Dict[str, Any]) -> Dict[str, Any]:
+    def map_dynamodb_item_to_response(self, item: Dict[str, Any]) -> Dict[str, Any]:
         agent_outputs = item.get("agent_outputs", {})
 
         company_research = agent_outputs.get("company_research", {})
@@ -167,9 +189,13 @@ class ResearchService:
 
         report = item.get("report", {})
         email_draft = item.get("email_draft", {})
+        metadata = item.get("metadata", {})
 
         company = item.get("company", {})
         employee = item.get("employee", {})
+
+        pdf_s3_key = report.get("pdf_s3_key")
+        pdf_url = self.s3_service.generate_presigned_url(pdf_s3_key)
 
         return {
             "report_id": item.get("report_id"),
@@ -186,6 +212,7 @@ class ResearchService:
 
             "best_outreach_angle": personalization.get("best_angle"),
             "report_markdown": report.get("markdown"),
+            "pdf_url": pdf_url,
 
             "cold_email_subject": email_draft.get("subject"),
             "cold_email_body": email_draft.get("body"),
@@ -197,4 +224,7 @@ class ResearchService:
 
             "approval_status": email_draft.get("approval_status", "pending"),
             "sent_status": email_draft.get("sent_status", "not_sent"),
+
+            "error_message": metadata.get("error_message"),
         }
+        

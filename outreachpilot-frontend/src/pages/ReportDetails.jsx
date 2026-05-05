@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   CheckCircle2,
+  FileText,
   Mail,
   RefreshCcw,
   Send,
@@ -63,6 +64,11 @@ function normalizeReportPayload(data) {
       data.report?.markdown ||
       "",
 
+    pdf_url:
+      data.pdf_url ||
+      data.report?.pdf_url ||
+      "",
+
     cold_email_subject:
       data.cold_email_subject ||
       data.email_draft?.subject ||
@@ -106,6 +112,11 @@ function normalizeReportPayload(data) {
       data.sent_status ||
       data.email_draft?.sent_status ||
       "not_sent",
+
+    error_message:
+      data.error_message ||
+      data.metadata?.error_message ||
+      "",
   };
 }
 
@@ -113,7 +124,7 @@ function MarkdownLikeRenderer({ content }) {
   if (!content) {
     return (
       <p className="text-sm text-slate-500">
-        No report markdown was returned by the backend.
+        No report markdown was returned by the backend yet.
       </p>
     );
   }
@@ -145,7 +156,6 @@ export default function ReportDetails() {
 
   async function loadReport() {
     setError("");
-    setIsLoading(true);
 
     try {
       const data = await getResearchReport(reportId);
@@ -162,9 +172,29 @@ export default function ReportDetails() {
   }
 
   useEffect(() => {
+    setIsLoading(true);
     loadReport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reportId]);
+
+  // Poll backend while background LangGraph workflow is still running.
+  useEffect(() => {
+    if (!report) return;
+
+    const shouldPoll =
+      report.status === "running" ||
+      report.status === "pending";
+
+    if (!shouldPoll) return;
+
+    const intervalId = setInterval(() => {
+      loadReport();
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report?.status, reportId]);
 
   async function handleApprove() {
     setActionLoading("approve");
@@ -215,6 +245,11 @@ export default function ReportDetails() {
       report.sent_status !== "sent"
     );
   }, [report]);
+
+  const isProcessing =
+    report?.status === "running" || report?.status === "pending";
+
+  const isFailed = report?.status === "failed";
 
   if (isLoading) {
     return (
@@ -279,7 +314,7 @@ export default function ReportDetails() {
         </div>
       </div>
 
-      {report.status !== "completed" && (
+      {isProcessing && (
         <div className="mb-6 rounded-2xl border border-blue-200 bg-blue-50 p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -287,7 +322,8 @@ export default function ReportDetails() {
                 Research is still processing
               </h2>
               <p className="mt-1 text-sm text-blue-700">
-                Refresh this page after the backend LangGraph workflow is done.
+                The LangGraph workflow is running in the background. This page
+                refreshes automatically every few seconds.
               </p>
             </div>
 
@@ -302,10 +338,63 @@ export default function ReportDetails() {
         </div>
       )}
 
+      {isFailed && (
+        <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5">
+          <h2 className="font-bold text-red-900">
+            Research workflow failed
+          </h2>
+
+          <p className="mt-1 text-sm text-red-700">
+            {report.error_message ||
+              "Something went wrong during report generation."}
+          </p>
+
+          <button
+            onClick={loadReport}
+            className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700"
+          >
+            <RefreshCcw size={16} />
+            Retry Fetch
+          </button>
+        </div>
+      )}
+
       {actionMessage && (
         <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-700 shadow-sm">
           {actionMessage}
         </div>
+      )}
+
+      {report.pdf_url && (
+        <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
+                  <FileText size={20} />
+                </div>
+
+                <h2 className="text-lg font-bold text-slate-900">
+                  PDF Report
+                </h2>
+              </div>
+
+              <p className="text-sm text-slate-600">
+                View or download the generated PDF report from S3. This link is
+                temporary and may expire.
+              </p>
+            </div>
+
+            <a
+              href={report.pdf_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center rounded-xl bg-brand-600 px-5 py-3 text-sm font-bold text-white hover:bg-brand-700"
+            >
+              View PDF Report
+            </a>
+          </div>
+        </section>
       )}
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_0.8fr]">
@@ -315,11 +404,11 @@ export default function ReportDetails() {
           </ReportSection>
 
           <ReportSection title="Company Summary">
-            <p>{report.company_summary || "No company summary available."}</p>
+            <p>{report.company_summary || "No company summary available yet."}</p>
           </ReportSection>
 
           <ReportSection title="Employee Summary">
-            <p>{report.employee_summary || "No employee summary available."}</p>
+            <p>{report.employee_summary || "No employee summary available yet."}</p>
           </ReportSection>
 
           <ReportSection title="Website Findings">
@@ -330,7 +419,7 @@ export default function ReportDetails() {
                 ))}
               </ul>
             ) : (
-              <p>No website findings available.</p>
+              <p>No website findings available yet.</p>
             )}
           </ReportSection>
         </div>
@@ -344,14 +433,14 @@ export default function ReportDetails() {
                 ))}
               </ul>
             ) : (
-              <p>No personalization hooks available.</p>
+              <p>No personalization hooks available yet.</p>
             )}
           </ReportSection>
 
           <ReportSection title="Best Outreach Angle">
             <p>
               {report.best_outreach_angle ||
-                "No outreach angle returned by backend."}
+                "No outreach angle returned by backend yet."}
             </p>
           </ReportSection>
 
@@ -360,32 +449,32 @@ export default function ReportDetails() {
               <p className="mb-3 text-sm font-bold text-slate-900">
                 Subject:{" "}
                 <span className="font-semibold">
-                  {report.cold_email_subject || "No subject generated"}
+                  {report.cold_email_subject || "No subject generated yet"}
                 </span>
               </p>
 
               <pre className="whitespace-pre-wrap rounded-xl bg-white p-4 text-sm leading-6 text-slate-700 ring-1 ring-slate-200">
-                {report.cold_email_body || "No cold email generated."}
+                {report.cold_email_body || "No cold email generated yet."}
               </pre>
             </div>
           </ReportSection>
 
           <ReportSection title="LinkedIn Message">
             <pre className="whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-700">
-              {report.linkedin_message || "No LinkedIn message generated."}
+              {report.linkedin_message || "No LinkedIn message generated yet."}
             </pre>
           </ReportSection>
 
           <ReportSection title="Follow-up Email">
             <pre className="whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-700">
-              {report.follow_up_email || "No follow-up email generated."}
+              {report.follow_up_email || "No follow-up email generated yet."}
             </pre>
           </ReportSection>
 
           <ReportSection title="Reviewer Feedback">
             <p>
               {report.reviewer_feedback ||
-                "No reviewer feedback returned by backend."}
+                "No reviewer feedback returned by backend yet."}
             </p>
 
             {report.confidence_score !== null && (
@@ -450,11 +539,12 @@ export default function ReportDetails() {
             <div className="mt-5 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
               <p className="flex items-center gap-2 font-semibold text-slate-800">
                 <Mail size={16} />
-                Report Email
+                Safety Note
               </p>
               <p className="mt-1">
-                The backend can send the research report to the user email
-                after report generation.
+                Review the generated report and draft before approving. In the
+                next step, approval can trigger an MCP/email tool to send the
+                outreach email.
               </p>
             </div>
 

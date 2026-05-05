@@ -7,6 +7,7 @@ class Settings(BaseSettings):
 
     AWS_REGION: str = "ap-south-1"
     DYNAMODB_REPORTS_TABLE: str = "OutreachPilotReports"
+    S3_REPORTS_BUCKET: str
 
     OPENAI_API_KEY: str
 
