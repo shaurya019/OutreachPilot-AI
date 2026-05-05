@@ -11,6 +11,9 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str
 
+    RESEND_API_KEY: str
+    EMAIL_FROM: str = "OutreachPilot AI <onboarding@resend.dev>"
+
     FRONTEND_URL: str = "http://localhost:5173"
     BACKEND_URL: str = "http://localhost:8000"
 

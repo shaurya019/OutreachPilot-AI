@@ -45,12 +45,25 @@ def get_research_report(report_id: str):
 def approve_research_outreach(report_id: str):
     service = ResearchService()
 
-    result = service.approve_outreach(report_id)
+    try:
+        result = service.approve_outreach(report_id)
 
-    if not result:
-        raise HTTPException(status_code=404, detail="Email draft not found")
+        if not result:
+            raise HTTPException(status_code=404, detail="Email draft not found")
 
-    return result
+        return result
+
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send outreach email: {str(exc)}",
+        )
 
 
 @router.post("/{report_id}/reject", response_model=ActionResponse)

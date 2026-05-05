@@ -7,12 +7,16 @@ from app.schemas.research import ResearchStartRequest
 from app.services.pdf_service import generate_report_pdf
 from app.services.s3_service import S3Service
 from app.utils.time import utc_now_iso
-
+from app.tools.email_tools import (
+    EmailTools,
+    SendApprovedOutreachInput,
+)
 
 class ResearchService:
     def __init__(self):
         self.repository = ReportRepository()
         self.s3_service = S3Service()
+        self.email_tools = EmailTools()
 
     def start_research(self, payload: ResearchStartRequest) -> Dict[str, Any]:
         report_id = str(uuid.uuid4())
@@ -157,15 +161,63 @@ class ResearchService:
         return self.map_dynamodb_item_to_response(item)
 
     def approve_outreach(self, report_id: str) -> Optional[Dict[str, str]]:
-        updated_item = self.repository.approve_outreach(report_id)
+        item = self.repository.get_report_by_id(report_id)
 
-        if not updated_item:
+        if not item:
             return None
 
-        return {
-            "status": "approved",
-            "message": "Outreach email approved. Mock email sent successfully.",
-        }
+        email_draft = item.get("email_draft") or {}
+        user = item.get("user") or {}
+
+        recipient_email = email_draft.get("recipient_email")
+        subject = email_draft.get("subject")
+        body = email_draft.get("body")
+
+        if not recipient_email:
+            raise ValueError("Recipient email is missing from email draft.")
+
+        if not subject:
+            raise ValueError("Email subject is missing from email draft.")
+
+        if not body:
+            raise ValueError("Email body is missing from email draft.")
+
+        current_sent_status = email_draft.get("sent_status", "not_sent")
+
+        if current_sent_status == "sent":
+            return {
+                "status": "already_sent",
+                "message": "Outreach email was already sent.",
+            }
+
+        try:
+            tool_input = SendApprovedOutreachInput(
+                recipient_email=recipient_email,
+                subject=subject,
+                body=body,
+                reply_to=user.get("email"),
+                approval_status="approved",
+            )
+
+            tool_result = self.email_tools.send_approved_outreach_email(tool_input)
+
+            self.repository.mark_outreach_sent(
+                report_id=report_id,
+                provider_message_id=tool_result.provider_message_id,
+            )
+
+            return {
+                "status": "approved",
+                "message": "Outreach email approved and sent successfully.",
+            }
+
+        except Exception as exc:
+            self.repository.mark_outreach_failed(
+                report_id=report_id,
+                error_message=str(exc),
+            )
+
+            raise
 
     def reject_outreach(self, report_id: str) -> Optional[Dict[str, str]]:
         updated_item = self.repository.reject_outreach(report_id)
