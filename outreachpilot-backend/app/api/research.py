@@ -42,11 +42,11 @@ def get_research_report(report_id: str):
 
 
 @router.post("/{report_id}/approve", response_model=ActionResponse)
-def approve_research_outreach(report_id: str):
+async def approve_research_outreach(report_id: str):
     service = ResearchService()
 
     try:
-        result = service.approve_outreach(report_id)
+        result = await service.approve_outreach(report_id)
 
         if not result:
             raise HTTPException(status_code=404, detail="Email draft not found")
@@ -62,7 +62,7 @@ def approve_research_outreach(report_id: str):
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to send outreach email: {str(exc)}",
+            detail=f"Failed to send outreach email through MCP tool: {str(exc)}",
         )
 
 
